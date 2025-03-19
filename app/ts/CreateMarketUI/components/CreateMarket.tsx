@@ -23,10 +23,15 @@ const isValidDate = (dateStr: string): boolean => {
 	)
 }
 
+const affiliateFeeOptions = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 50, 75, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000].map((divisor) => ({
+	id: divisor,
+	name: divisor === 0 ? "0.00%" : `${ (100 / divisor).toFixed(2) }%`
+}))
+
 export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProps) => {
 	const endTime = useSignal<string>('')
 	const marketCreatorFee = useSignal<string>('')
-	const affiliateValidator = useSignal<string>('')
+	const affiliateValidator = useSignal<string>('0x0000000000000000000000000000000000000000')
 	const affiliateFeeDivisor = useSignal<string>('')
 	const designatedReporterAddress = useSignal<string>('')
 	const description = useSignal<string>('')
@@ -79,7 +84,7 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 	function handleAffiliateValidator(value: string) {
 		affiliateValidator.value = value
 	}
-	function handleAffiliateFeeDivisor(value: string) {
+	function handleAffiliateFee(value: string) {
 		affiliateFeeDivisor.value = value
 	}
 	function handleDesignatedReporterAddress(value: string) {
@@ -111,7 +116,7 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 				value = { endTime.value }
 				onInput = { e => handleEndTimeInput(e.currentTarget.value) }
 			/>
-			<p style = 'margin: 0;'> Market Creator Fee(%): </p>
+			<p style = 'margin: 0;'> Market Creator Fee (%): </p>
 			<input
 				style = 'height: fit-content;'
 				class = 'input'
@@ -121,26 +126,26 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 				value = { marketCreatorFee.value }
 				onInput = { e => handleMarketCreatorFee(e.currentTarget.value) }
 			/>
-			<p style = 'margin: 0;'> Affiliate Validator Address: </p>
-			<input
-				style = 'height: fit-content;'
-				class = 'input'
-				type = 'text'
-				width = '100%'
-				placeholder = '0x...'
-				value = { affiliateValidator.value }
-				onInput = { e => handleAffiliateValidator(e.currentTarget.value) }
-			/>
-			<p style = 'margin: 0;'> Affiliate Fee Divisor: </p>
-			<input
-				style = 'height: fit-content;'
-				class = 'input'
-				type = 'text'
-				width = '100%'
-				placeholder = '2'
-				value = { affiliateFeeDivisor.value }
-				onInput = { e => handleAffiliateFeeDivisor(e.currentTarget.value) }
-			/>
+			<div>
+				<p style = 'margin: 0;'> Affiliate Validator Address: </p>
+				<input
+					style = 'height: fit-content;'
+					class = 'input'
+					type = 'text'
+					width = '100%'
+					placeholder = '0x...'
+					value = { affiliateValidator.value }
+					onInput = { e => handleAffiliateValidator(e.currentTarget.value) }
+				/>
+				<p style = 'margin: 0;'> Affiliate Fee (%): </p>
+				<select onInput = { e => handleAffiliateFee(e.currentTarget.value) }>
+					{ affiliateFeeOptions.map((fee) => (
+						<option key = { fee.id } value = { fee.id }>
+							{ fee.name }
+						</option>
+					)) }
+				</select>
+			</div>
 			<p style = 'margin: 0;'> Designated Reporter Address: </p>
 			<input
 				style = 'height: fit-content;'
