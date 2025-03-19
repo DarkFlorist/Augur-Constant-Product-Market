@@ -1,5 +1,5 @@
 import { createElement, render } from 'preact'
-import { App } from './ConstantProductUI/components/App.js'
+import { App } from './App.js'
 
 // specify our render function, which will be fired anytime rootModel is mutated
 function rerender() {
