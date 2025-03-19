@@ -24,13 +24,15 @@ const isValidDate = (dateStr: string): boolean => {
 }
 
 export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProps) => {
-
 	const endTime = useSignal<string>('')
 	const marketCreatorFee = useSignal<string>('')
 	const affiliateValidator = useSignal<string>('')
 	const affiliateFeeDivisor = useSignal<string>('')
 	const designatedReporterAddress = useSignal<string>('')
-	const extraInfo = useSignal<string>('')
+	const description = useSignal<string>('')
+	const longDescription = useSignal<string>('')
+	const categories = useSignal<string>('')
+	const tags = useSignal<string>('')
 
 	const createMarket = async () => {
 		const account = maybeAccountAddress.peek()
@@ -46,8 +48,14 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 		if (!parsedAffiliateValidator.success) throw new Error('missing affiliateValidator')
 		if (!parsedAffiliateFeeDivisor.success) throw new Error('missing affiliateFeeDivisor')
 		if (!parsedDesignatedReporterAddress.success) throw new Error('missing designatedReporterAddress')
-		if (extraInfo.value === undefined) throw new Error('missing extraInfo')
-		await createYesNoMarket(account.value, marketEndTimeUnixTimeStamp, parsedFeePerCashInAttoCash, addressString(parsedAffiliateValidator.value), parsedAffiliateFeeDivisor.value, addressString(parsedDesignatedReporterAddress.value), extraInfo.value)
+		if (description.value.length === 0) throw new Error('missing description')
+		const extraInfoString = JSON.stringify({
+			description: description.value,
+			longDescription: longDescription.value,
+			categories: categories.value.split(',').map((category) => category.trim()).filter((category) => category.length > 0),
+			tags: categories.value.split(',').map((tag) => tag.trim()).filter((tag) => tag.length > 0)
+		})
+		await createYesNoMarket(account.value, marketEndTimeUnixTimeStamp, parsedFeePerCashInAttoCash, addressString(parsedAffiliateValidator.value), parsedAffiliateFeeDivisor.value, addressString(parsedDesignatedReporterAddress.value), extraInfoString)
 	}
 
 	const approveRep = async () => {
@@ -77,8 +85,17 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 	function handleDesignatedReporterAddress(value: string) {
 		designatedReporterAddress.value = value
 	}
-	function handleExtraInfo(value: string) {
-		extraInfo.value = value
+	function handleDescription(value: string) {
+		description.value = value
+	}
+	function handleLongDescription(value: string) {
+		longDescription.value = value
+	}
+	function handleTags(value: string) {
+		tags.value = value
+	}
+	function handleCategories(value: string) {
+		categories.value = value
 	}
 
 	return <>
@@ -134,16 +151,42 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 				value = { designatedReporterAddress.value }
 				onInput = { e => handleDesignatedReporterAddress(e.currentTarget.value) }
 			/>
-			<p style = 'margin: 0;'> Extra Info: </p>
-			<input
-				style = 'height: fit-content;'
-				class = 'input'
-				type = 'text'
-				width = '100%'
-				placeholder = '0x..'
-				value = { extraInfo.value }
-				onInput = { e => handleExtraInfo(e.currentTarget.value) }
-			/>
+			<div>
+				<p style = 'margin: 0;'> Description: </p>
+				<input
+					style = 'height: fit-content; width: 100%'
+					class = 'input'
+					type = 'text'
+					placeholder = 'How many goats...'
+					value = { description.value }
+					onInput = { e => handleDescription(e.currentTarget.value) }
+				/>
+				<p style = 'margin: 0;'> Long description: </p>
+				<textarea
+					style = 'height: fit-content; width: 100%'
+					placeholder = 'This market resolves...'
+					value = { longDescription.value }
+					onInput = { e => handleLongDescription(e.currentTarget.value) }
+				/>
+				<p style = 'margin: 0;'> Categories (comma separated): </p>
+				<input
+					style = 'height: fit-content; width: 100%'
+					class = 'input'
+					type = 'text'
+					placeholder = 'cryptocurrency, goats...'
+					value = { categories.value }
+					onInput = { e => handleCategories(e.currentTarget.value) }
+				/>
+				<p style = 'margin: 0;'> Tags (comma separated): </p>
+				<input
+					style = 'height: fit-content; width: 100%'
+					class = 'input'
+					type = 'text'
+					placeholder = 'cryptocurrency, goats...'
+					value = { tags.value }
+					onInput = { e => handleTags(e.currentTarget.value) }
+				/>
+			</div>
 			<button class = 'button is-primary' onClick = { createMarket }> Create Market </button>
 			<button class = 'button is-primary' onClick = { approveRep }> Approve REP </button>
 			<button class = 'button is-primary' onClick = { approveDai }> Approve DAI </button>
