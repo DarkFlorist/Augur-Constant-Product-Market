@@ -3,9 +3,10 @@ import { AccountAddress, EthereumQuantity } from '../types/types.js'
 import { createPublicClient, createWalletClient, custom, getContractAddress, http, numberToBytes, publicActions } from 'viem'
 import { mainnet } from 'viem/chains'
 import { augurConstantProductMarketContractArtifact } from '../VendoredAugurConstantProductMarket.js'
-import { AUGUR_UNIVERSE_ABI } from '../CreateMarketUI/ABI/UniverseAbi.js'
-import { ERC20_ABI } from '../CreateMarketUI/ABI/Erc20Abi.js'
-import { GENESIS_UNIVERSE, PROXY_DEPLOYER_ADDRESS } from './constants.js'
+import { AUGUR_UNIVERSE_ABI } from '../ABI/UniverseAbi.js'
+import { ERC20_ABI } from '../ABI/Erc20Abi.js'
+import { AUGUR_CONTRACT, GENESIS_UNIVERSE, PROXY_DEPLOYER_ADDRESS } from './constants.js'
+import { AUGUR_ABI } from '../ABI/AugurAbi.js'
 
 export const requestAccounts = async () => {
 	if (window.ethereum === undefined) throw new Error('no window.ethereum injected')
@@ -97,3 +98,14 @@ export const approveErc20Token = async (approver: AccountAddress, tokenAddress: 
 		args: [approvedAdress, amount]
 	})
 }
+
+export const fetchMarket = async (reader: AccountAddress, marketAddress: AccountAddress) => {
+	const client = createWriteClient(reader)
+	return await client.readContract({
+		abi: AUGUR_ABI,
+		functionName: 'getMarketCreationData',
+		address: AUGUR_CONTRACT,
+		args: [marketAddress]
+	})
+}
+

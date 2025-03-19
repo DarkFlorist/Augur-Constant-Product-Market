@@ -103,7 +103,7 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 		categories.value = value
 	}
 
-	return <>
+	return <div class = 'subApplication'>
 		<p style = 'margin: 0;'> Create Market: </p>
 		<div style = 'display: grid; width: 100%; gap: 10px;'>
 			<p style = 'margin: 0;'> End Time (UTC): </p>
@@ -196,5 +196,5 @@ export const CreateYesNoMarket = ({ maybeAccountAddress }: CreateYesNoMarketProp
 			<button class = 'button is-primary' onClick = { approveRep }> Approve REP </button>
 			<button class = 'button is-primary' onClick = { approveDai }> Approve DAI </button>
 		</div>
-	</>
+	</div>
 }
