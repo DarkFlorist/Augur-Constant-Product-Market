@@ -76,3 +76,9 @@ export const formatUnixTimestampISO = (timestamp: bigint): string => {
 	const date = new Date(Number(timestamp) * 1000)
 	return date.toISOString()
 }
+
+export function areEqualArrays<T>(first: readonly T[], second: readonly T[]) {
+	if (first === second) return true
+	if (first.length !== second.length) return false
+	return first.every((value, index) => value === second[index])
+}

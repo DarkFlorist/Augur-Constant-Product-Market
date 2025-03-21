@@ -11,6 +11,8 @@ import { HOT_LOADING_ABI } from '../ABI/HotLoading.js'
 import { BUY_PARTICIPATION_TOKENS_ABI } from '../ABI/BuyParticipationTokensAbi.js'
 import { MARKET_ABI } from '../ABI/MarketAbi.js'
 import { bytes32String } from './ethereumUtils.js'
+import { DISPUTE_WINDOW_ABI } from '../ABI/DisputeWindow.js'
+import { REPORTING_PARTICIPANT_ABI } from '../ABI/ReportingParticipant.js'
 
 export const requestAccounts = async () => {
 	if (window.ethereum === undefined) throw new Error('no window.ethereum injected')
@@ -194,10 +196,97 @@ export const getStakeInOutcome = async (reader: AccountAddress, market: AccountA
 	})
 }
 
-export const getStakesOnAllOutcomesOnYesNoMarketOrCategorical = async (reader: AccountAddress, market: AccountAddress, numOutcomes: number, numTicks: EthereumQuantity) => {
-	const allPayoutNumeratorCombinations = Array.from({ length: numOutcomes }, (_, outcome) =>
+export const getAllPayoutNumeratorCombinations = (numOutcomes: number, numTicks: EthereumQuantity): readonly bigint[][] => {
+	return Array.from({ length: numOutcomes }, (_, outcome) =>
 		Array.from({ length: numOutcomes }, (_, index) => index === outcome ? numTicks : 0n)
 	)
+}
+
+export const getStakesOnAllOutcomesOnYesNoMarketOrCategorical = async (reader: AccountAddress, market: AccountAddress, numOutcomes: number, numTicks: EthereumQuantity) => {
+	const allPayoutNumeratorCombinations = getAllPayoutNumeratorCombinations(numOutcomes, numTicks)
 	const payoutDistributionHashes = await Promise.all(allPayoutNumeratorCombinations.map(async (payoutNumerator) => EthereumQuantity.parse(await derivePayoutDistributionHash(reader, market, payoutNumerator))))
 	return await Promise.all(payoutDistributionHashes.map((payoutDistributionHash) => getStakeInOutcome(reader, market, payoutDistributionHash)))
+}
+
+export const contributeToMarketDispute = async (writer: AccountAddress, market: AccountAddress, payoutNumerators: EthereumQuantity[], amount: EthereumQuantity, reason: string) => {
+	const client = createWriteClient(writer)
+	return await client.writeContract({
+		abi: MARKET_ABI,
+		functionName: 'contribute',
+		address: market,
+		args: [payoutNumerators, amount, reason]
+	})
+}
+
+export const contributeToMarketDisputeOnTentativeOutcome = async (writer: AccountAddress, market: AccountAddress, payoutNumerators: EthereumQuantity[], amount: EthereumQuantity, reason: string) => {
+	const client = createWriteClient(writer)
+	return await client.writeContract({
+		abi: MARKET_ABI,
+		functionName: 'contributeToTentative',
+		address: market,
+		args: [payoutNumerators, amount, reason]
+	})
+}
+
+export const getDisputeWindow = async (reader: AccountAddress, market: AccountAddress) => {
+	const client = createReadClient(reader)
+	return await client.readContract({
+		abi: MARKET_ABI,
+		functionName: 'getDisputeWindow',
+		address: market,
+		args: []
+	})
+}
+
+export const getDisputeWindowInfo = async (reader: AccountAddress, disputeWindow: AccountAddress) => {
+	const client = createReadClient(reader)
+	const startTime = await client.readContract({
+		abi: DISPUTE_WINDOW_ABI,
+		functionName: 'getStartTime',
+		address: disputeWindow,
+		args: []
+	})
+	const endTime = await client.readContract({
+		abi: DISPUTE_WINDOW_ABI,
+		functionName: 'getEndTime',
+		address: disputeWindow,
+		args: []
+	})
+	const isActive = await client.readContract({
+		abi: DISPUTE_WINDOW_ABI,
+		functionName: 'isActive',
+		address: disputeWindow,
+		args: []
+	})
+	return {
+		startTime,
+		endTime,
+		isActive
+	}
+}
+
+export const getWinningReportingParticipant = async (reader: AccountAddress, market: AccountAddress) => {
+	const client = createReadClient(reader)
+	return await client.readContract({
+		abi: MARKET_ABI,
+		functionName: 'getWinningReportingParticipant',
+		address: market,
+		args: []
+	})
+}
+
+export const getPayoutNumeratorsForReportingParticipant = async (reader: AccountAddress, reportingParticipant: AccountAddress) => {
+	const client = createReadClient(reader)
+	return await client.readContract({
+		abi: REPORTING_PARTICIPANT_ABI,
+		functionName: 'getPayoutNumerators',
+		address: reportingParticipant,
+		args: []
+	})
+}
+
+export const getWinningPayoutNumerators = async (reader: AccountAddress, market: AccountAddress) => {
+	const participantAddress = await getWinningReportingParticipant(reader, market)
+	if (EthereumQuantity.parse(participantAddress) === 0n) return undefined
+	return await getPayoutNumeratorsForReportingParticipant(reader, participantAddress)
 }
