@@ -85,7 +85,8 @@ export type MockWindowEthereum = EIP1193Provider & {
 	advanceTime: (amountInSeconds: EthereumQuantity) => Promise<void>
 }
 export const getMockedEthSimulateWindowEthereum = (): MockWindowEthereum => {
-	const httpsRpc = 'https://ethereum.dark.florist'
+	const specifiedEndpoint = process.env.ETHEREUM_TEST_RPC_ENDPOINT
+	const httpsRpc = specifiedEndpoint ? specifiedEndpoint : 'https://ethereum.dark.florist'
 	const ethereumClientService = new EthereumClientService(
 		new EthereumJSONRpcRequestHandler(httpsRpc, false),
 		async () => {},

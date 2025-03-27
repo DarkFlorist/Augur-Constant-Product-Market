@@ -20,9 +20,15 @@ const countFalses = (arr: boolean[]): number => {
 
 type Test = [string, () => Promise<void>, boolean | undefined]
 export const runTestsSequentially = async (tests: Test[]) => {
-	console.log(`Running ${ tests.length } tests`)
+	const args: string[] = process.argv.slice(2);
+	console.log(args.length < 1 ? `Running ${ tests.length } tests` : `Running only test named "${args[0]}"`)
 	const successes = []
 	for (const [testName, testFunc, ignore] of tests) {
+		if (args.length > 0 && (args[0].toLowerCase() != testName.toLowerCase())) {
+			console.log(`Skipping "${testName}"`)
+			successes.push(true)
+			continue
+		}
 		try {
 			if (ignore === true) {
 				console.log(`TEST "${ testName }" IGNORED!`)

@@ -3,8 +3,9 @@
 	"type": "module",
 	"description": "Augur-Constant-Product-Market-Contracts",
 	"scripts": {
+		"contracts": "npm ci --ignore-scripts && npm run compile && cd .. && npm run vendor",
 		"compile": "tsc && node ./js/compile.js",
-		"test": "tsc && node ./js/tests/test.js"
+		"test": "tsc --noEmit && node --import tsx $npm_config_testargs ./ts/tests/test.ts"
 	},
 	"keywords": [],
 	"author": "",
@@ -14,6 +15,7 @@
 		"typescript": "5.8.2",
 		"solc": "0.8.29",
 		"viem": "2.23.12",
-		"funtypes": "5.1.1"
+		"funtypes": "5.1.1",
+		"tsx": "4.19.3"
 	}
 }

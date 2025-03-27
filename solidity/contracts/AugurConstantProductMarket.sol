@@ -3,32 +3,37 @@ pragma solidity 0.8.29;
 
 import { ERC20 } from "./ERC20.sol";
 import { IERC20 } from "./IERC20.sol";
-import { ShareToken } from "./AugurMock.sol";
-import { Dai } from "./DaiMock.sol";
+import { IShareToken } from "./IShareToken.sol";
+import { IMarket } from "./IMarket.sol";
 
 contract AugurConstantProduct is ERC20 {
 
-	IERC20 public dai = new Dai();
-	ShareToken public shareToken = new ShareToken(dai);
-	address public constant augurMarket = address(0x0); // TODO
-	uint256 public constant numTicks = 100;
+	IERC20 public dai = ERC20(address(0x6B175474E89094C44Da98b954EedeAC495271d0F));
+	IShareToken public shareToken;
+	address public constant augurMarketAddress = address(0x5D1C6191E6c9D8DD2ea7A6CbB50265cD37BF01Ce);
+	IMarket public constant augurMarket = IMarket(augurMarketAddress);
+	address public constant augurAddress = address(0x23916a8F5C3846e3100e5f587FF14F3098722F5d);
+	uint256 public numTicks;
 	uint256 public INVALID;
 	uint256 public NO;
 	uint256 public YES;
 
-	constructor() ERC20("Augur Constant Product: Trump 2020", "ACP-TRUMP2020") {
+	constructor() ERC20("Augur Constant Product DEV Market", "ACPM-DEV") {
+		shareToken = augurMarket.shareToken();
+		numTicks = augurMarket.getNumTicks();
 		dai.approve(address(shareToken), 2**256-1);
-		INVALID = shareToken.getTokenId(augurMarket, 0);
-		NO = shareToken.getTokenId(augurMarket, 1);
-		YES = shareToken.getTokenId(augurMarket, 2);
+		dai.approve(augurAddress, 2**256-1);
+		INVALID = shareToken.getTokenId(augurMarketAddress, 0);
+		NO = shareToken.getTokenId(augurMarketAddress, 1);
+		YES = shareToken.getTokenId(augurMarketAddress, 2);
 	}
 
 	function addLiquidity(uint256 sharesToBuy) external {
-		// TODO: gas golf this function a bit, though it doesn't really matter
+		//TODO: gas golf this function a bit, though it doesn't really matter
 		uint256 poolConstantBefore = sqrt(poolConstant());
 
-		dai.transferFrom(msg.sender, address(this), sharesToBuy * 100);
-		shareToken.publicBuyCompleteSets(augurMarket, sharesToBuy);
+		dai.transferFrom(msg.sender, address(this), sharesToBuy * numTicks);
+		shareToken.buyCompleteSets(augurMarketAddress, address(this), sharesToBuy);
 
 		if (poolConstantBefore == 0) {
 			_mint(msg.sender, sqrt(poolConstant()));
@@ -40,17 +45,37 @@ contract AugurConstantProduct is ERC20 {
 	function removeLiquidity(uint256 poolTokensToSell) external {
 		uint256 poolSupply = totalSupply();
 		(uint256 poolInvalid, uint256 poolNo, uint256 poolYes) = shareBalances(address(this));
+
+		_burn(msg.sender, poolTokensToSell);
+
 		uint256 poolDai = dai.balanceOf(address(this));
 		uint256 invalidShare = poolInvalid * poolTokensToSell / poolSupply;
 		uint256 noShare = poolNo * poolTokensToSell / poolSupply;
 		uint256 yesShare = poolYes * poolTokensToSell / poolSupply;
-		uint256 daiShare = poolDai * poolTokensToSell / poolSupply;
-		_burn(msg.sender, poolTokensToSell);
-		shareTransfer(address(this), msg.sender, invalidShare, noShare, yesShare);
-		dai.transfer(msg.sender, daiShare);
-
-		// TODO: convert min(poolInvalid, poolYes, poolNo) to DAI by selling complete sets
+		
 		// CONSIDER: selling complete sets incurs Augur fees, maybe we should let the user sell the sets themselves if they want to pay the fee?
+		uint256 completeSetsToSell = invalidShare;
+		completeSetsToSell = noShare < completeSetsToSell ? noShare : completeSetsToSell;
+		completeSetsToSell = yesShare < completeSetsToSell ? yesShare : completeSetsToSell;
+		shareToken.publicSellCompleteSets(augurMarketAddress, completeSetsToSell);
+		uint256 poolDaiAfterSale = dai.balanceOf(address(this));
+		uint256 daiFromCompleteSets = poolDaiAfterSale - poolDai;
+
+		// Send shares
+		uint256[] memory tokenIds = new uint256[](3);
+		tokenIds[0] = INVALID;
+		tokenIds[1] = NO;
+		tokenIds[2] = YES;
+
+		uint256[] memory tokenValues = new uint256[](3);
+		tokenValues[0] = invalidShare - completeSetsToSell;
+		tokenValues[1] = noShare - completeSetsToSell;
+		tokenValues[2] = yesShare - completeSetsToSell;
+		shareToken.unsafeBatchTransferFrom(address(this), msg.sender, tokenIds, tokenValues);
+
+		// Send DAI
+		uint256 daiShare = daiFromCompleteSets + poolDai * poolTokensToSell / poolSupply;
+		dai.transfer(msg.sender, daiShare);
 	}
 
 	function enterPosition(uint256 amountInDai, bool buyYes) external {
@@ -73,7 +98,6 @@ contract AugurConstantProduct is ERC20 {
 		// simulate user swapping YES to NO or NO to YES
 		uint256 simulatedPoolConstant = poolYes * poolNo;
 		if (buyYes) {
-			// yesToUser += poolYes - poolConstant / (poolNo + noToUser)
 			yesToUser = yesToUser + poolYes - simulatedPoolConstant / (poolNo + noToUser);
 			noToUser = 0;
 		} else {
@@ -88,13 +112,13 @@ contract AugurConstantProduct is ERC20 {
 
 	function exitPosition(uint256 daiToBuy) external {
 		(uint256 userInvalid, uint256 userNo, uint256 userYes) = shareBalances(msg.sender);
-		// TODO: gas golf this down by creating another function that only fetches YES/NO
-		(, uint256 poolNo, uint256 poolYes) = shareBalances(address(this));
+		(uint256 poolNo, uint256 poolYes) = noYesShareBalances(address(this));
 		uint256 setsToSell = daiToBuy / numTicks;
 
 		// short circuit if user is closing out their own complete sets
 		if (userInvalid >= setsToSell && userNo >= setsToSell && userYes >= setsToSell) {
 			shareTransfer(msg.sender, address(this), setsToSell, setsToSell, setsToSell);
+			shareToken.publicSellCompleteSets(augurMarketAddress, setsToSell);
 			dai.transfer(msg.sender, daiToBuy);
 			return;
 		}
@@ -109,13 +133,19 @@ contract AugurConstantProduct is ERC20 {
 		uint256 yesFromUser = 0;
 		if (userYes > userNo) {
 			uint256 noToUser = setsToSell - userNo;
-			uint256 yesToPool = simulatedPoolConstant / (poolNo - noToUser) - poolYes;
+			uint256 poolNoLessTouser = poolNo - noToUser;
+			uint256 yesToPool = simulatedPoolConstant / poolNoLessTouser;
+			if (yesToPool * poolNoLessTouser < simulatedPoolConstant) yesToPool += 1;
+			yesToPool = yesToPool - poolYes;
 			require(yesToPool <= userYes - setsToSell, "AugurCP: You don't have enough YES tokens to close out for this amount.");
 			noFromUser = userNo;
 			yesFromUser = yesToPool + setsToSell;
 		} else {
 			uint256 yesToUser = setsToSell - userYes;
-			uint256 noToPool = simulatedPoolConstant / (poolYes - yesToUser) - poolNo;
+			uint256 poolYesLessToUser = poolYes - yesToUser;
+			uint256 noToPool = simulatedPoolConstant / poolYesLessToUser;
+			if (noToPool * poolYesLessToUser < simulatedPoolConstant) noToPool += 1;
+			noToPool = noToPool - poolNo;
 			require(noToPool <= userNo - setsToSell, "AugurCP: You don't have enough NO tokens to close out for this amount.");
 			yesFromUser = userYes;
 			noFromUser = noToPool + setsToSell;
@@ -123,16 +153,15 @@ contract AugurConstantProduct is ERC20 {
 
 		// materialize the complete set sale for dai
 		shareTransfer(msg.sender, address(this), invalidFromUser, noFromUser, yesFromUser);
+		shareToken.publicSellCompleteSets(augurMarketAddress, setsToSell);
 		dai.transfer(msg.sender, daiToBuy);
 	}
 
 	function swap(uint256 inputShares, bool inputYes) external returns (uint256) {
-		// TODO: gas golf this down by creating another function that only fetches YES/NO
-		(, uint256 poolNo, uint256 poolYes) = shareBalances(address(this));
+		(uint256 poolNo, uint256 poolYes) = noYesShareBalances(address(this));
 		uint256 currentPoolConstant = poolYes * poolNo;
 		if (inputYes) {
 			uint256 yesFromUser = inputShares;
-			// noToUser = poolNo - poolConstant / (poolYes + yesFromUser)
 			uint256 noToUser = poolNo - currentPoolConstant / (poolYes + yesFromUser);
 			shareToken.unsafeTransferFrom(msg.sender, address(this), YES, yesFromUser);
 			shareToken.unsafeTransferFrom(address(this), msg.sender, NO, noToUser);
@@ -147,10 +176,11 @@ contract AugurConstantProduct is ERC20 {
 	}
 
 	function poolConstant() public view returns (uint256) {
-		return shareToken.balanceOf(address(this), YES) * shareToken.balanceOf(address(this), NO);
+		(uint256 poolNo, uint256 poolYes) = noYesShareBalances(address(this));
+		return poolNo * poolYes;
 	}
 
-	function shareBalances(address owner) private view returns (uint256 invalid, uint256 no, uint256 yes) {
+	function shareBalances(address owner) public view returns (uint256 invalid, uint256 no, uint256 yes) {
 		uint256[] memory tokenIds = new uint256[](3);
 		tokenIds[0] = INVALID;
 		tokenIds[1] = NO;
@@ -166,6 +196,19 @@ contract AugurConstantProduct is ERC20 {
 		return (invalid, no, yes);
 	}
 
+	function noYesShareBalances(address owner) public view returns (uint256 no, uint256 yes) {
+		uint256[] memory tokenIds = new uint256[](2);
+		tokenIds[0] = NO;
+		tokenIds[1] = YES;
+		address[] memory owners = new address[](2);
+		owners[0] = owner;
+		owners[1] = owner;
+		uint256[] memory balances = shareToken.balanceOfBatch(owners, tokenIds);
+		no = balances[0];
+		yes = balances[1];
+		return (no, yes);
+	}
+
 	function shareTransfer(address from, address to, uint256 invalidAmount, uint256 noAmount, uint256 yesAmount) private {
 		uint256 size = (invalidAmount != 0 ? 1 : 0) + (noAmount != 0 ? 1 : 0) + (yesAmount != 0 ? 1 : 0);
 		uint256[] memory tokenIds = new uint256[](size);
@@ -177,9 +220,9 @@ contract AugurConstantProduct is ERC20 {
 			amounts[0] = invalidAmount != 0 ? invalidAmount : noAmount != 0 ? noAmount : yesAmount;
 		} else if (size == 2) {
 			tokenIds[0] = invalidAmount != 0 ? INVALID : NO;
-			tokenIds[1] = invalidAmount != 0 ? YES : NO;
+			tokenIds[1] = yesAmount != 0 ? YES : NO;
 			amounts[0] = invalidAmount != 0 ? invalidAmount : noAmount;
-			amounts[1] = invalidAmount != 0 ? yesAmount : noAmount;
+			amounts[1] = yesAmount != 0 ? yesAmount : noAmount;
 		} else {
 			tokenIds[0] = INVALID;
 			tokenIds[1] = NO;
