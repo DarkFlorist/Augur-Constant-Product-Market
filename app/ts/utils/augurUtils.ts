@@ -10,7 +10,7 @@ export const getUniverseName = (universeAddress: AccountAddress) => {
 
 export const isGenesisUniverse = (universeAddress: AccountAddress | undefined) => universeAddress !== undefined && getUniverseName(universeAddress) === 'Genesis'
 
-export const getAllPayoutNumeratorCombinations = (numOutcomes: number, numTicks: EthereumQuantity): readonly bigint[][] => Array.from({ length: numOutcomes }, (_, outcome) => Array.from({ length: numOutcomes }, (_, index) => index === outcome ? numTicks : 0n))
+export const getAllPayoutNumeratorCombinations = (numOutcomes: bigint, numTicks: EthereumQuantity): readonly bigint[][] => Array.from({ length: Number(numOutcomes) }, (_, outcome) => Array.from({ length: Number(numOutcomes) }, (_, index) => index === outcome ? numTicks : 0n))
 
 type MarketType = 'Yes/No' | 'Categorical' | 'Scalar'
 export const getOutcomeName = (index: number, marketType: MarketType, outcomes: readonly `0x${ string }`[]) => {
@@ -23,10 +23,13 @@ export const getOutcomeName = (index: number, marketType: MarketType, outcomes: 
 
 export const getOutcomeNamesAndNumeratorCombinationsForMarket = (marketType: MarketType, numOutcomes: bigint, numTicks: bigint, outcomes: readonly `0x${ string }`[]) => {
 	if (marketType === 'Scalar') throw new Error ('Scalar markets not implemented')
-	const allPayoutNumerators = getAllPayoutNumeratorCombinations(Number(numOutcomes), numTicks)
+	const allPayoutNumerators = getAllPayoutNumeratorCombinations(numOutcomes, numTicks)
 	return allPayoutNumerators.map((payoutNumerators, index) => {
 		const outcomeName = getOutcomeName(index, marketType, outcomes)
 		if (outcomeName === undefined) throw new Error(`outcome did not found for index: ${ index }. Outcomes: [${ outcomes.join(',') }]`)
 		return { outcomeName, payoutNumerators }
 	})
 }
+
+// todo, make path typesafe
+export const getUniverseUrl = (universe: AccountAddress, path: string) => `/#/${ path }?universe=${ universe }`

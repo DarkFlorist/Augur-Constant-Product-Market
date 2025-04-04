@@ -1,11 +1,11 @@
 import { OptionalSignal, useOptionalSignal } from '../../utils/OptionalSignal.js'
 import { AccountAddress, EthereumQuantity } from '../../types/types.js'
-import { fetchHotLoadingMarketData, getParentUniverse, getUniverseForkingInformation, migrateFromRepV1toRepV2GenesisToken, migrateReputationToChildUniverseByPayout } from '../../utils/augurContractUtils.js'
+import { fetchHotLoadingMarketData, getChildUniverse, getParentUniverse, getUniverseForkingInformation, migrateFromRepV1toRepV2GenesisToken, migrateReputationToChildUniverseByPayout } from '../../utils/augurContractUtils.js'
 import { approveErc20Token, getErc20TokenBalance } from '../../utils/erc20.js'
 import { MARKET_TYPES, REPUTATION_V1_TOKEN_ADDRESS } from '../../utils/constants.js'
-import { getOutcomeNamesAndNumeratorCombinationsForMarket, getUniverseName, isGenesisUniverse } from '../../utils/augurUtils.js'
-import { useComputed, useSignal } from '@preact/signals'
-import { addressString, bigintToDecimalString, formatUnixTimestampISO } from '../../utils/ethereumUtils.js'
+import { getOutcomeNamesAndNumeratorCombinationsForMarket, getUniverseName, getUniverseUrl, isGenesisUniverse } from '../../utils/augurUtils.js'
+import { Signal, useComputed, useSignal } from '@preact/signals'
+import { addressString, bigintToDecimalString, decimalStringToBigint, formatUnixTimestampISO } from '../../utils/ethereumUtils.js'
 import { Market, MarketData } from '../../SharedUI/Market.js'
 import { MarketOutcomeOption, MarketReportingWithoutStake } from '../../SharedUI/MarketReportingOptions.js'
 import { ExtraInfo } from '../../CreateMarketUI/types/createMarketTypes.js'
@@ -15,19 +15,23 @@ interface MigrationProps {
 	universe: OptionalSignal<AccountAddress>
 	reputationTokenAddress: OptionalSignal<AccountAddress>
 	universeForkingInformation: OptionalSignal<Awaited<ReturnType<typeof getUniverseForkingInformation>>>
+	pathSignal: Signal<string>
 }
 
 const GENESIS_REPUTATION_V2_TOKEN_ADDRESS = '0x221657776846890989a759BA2973e427DfF5C9bB'
 
-export const Migration = ({ maybeAccountAddress, reputationTokenAddress, universe, universeForkingInformation }: MigrationProps) => {
+export const Migration = ({ maybeAccountAddress, reputationTokenAddress, universe, universeForkingInformation, pathSignal }: MigrationProps) => {
 	const v2ReputationBalance = useOptionalSignal<EthereumQuantity>(undefined)
 	const v1ReputationBalance = useOptionalSignal<EthereumQuantity>(undefined)
 	const isGenesisUniverseField = useComputed(() => isGenesisUniverse(universe.deepValue))
 	const forkingoutcomeStakes = useOptionalSignal<readonly MarketOutcomeOption[]>(undefined)
 	const forkingMarketData = useOptionalSignal<MarketData>(undefined)
 	const selectedOutcome = useSignal<string | null>(null)
-	const repV2ToMigrate = useSignal<bigint>(0n)
+	const repV2ToMigrateToNewUniverse = useSignal<string>('')
 	const parentUniverse = useOptionalSignal<AccountAddress>(undefined)
+	const childUniverseAddress = useOptionalSignal<AccountAddress>(undefined)
+	const childUniverseUrl = useComputed(() => childUniverseAddress.deepValue === undefined ? '' : getUniverseUrl(childUniverseAddress.deepValue, 'migration'))
+	const parentUniverseUrl = useComputed(() => parentUniverse.deepValue === undefined ? '' : getUniverseUrl(parentUniverse.deepValue, 'migration'))
 
 	const getParsedExtraInfo = (extraInfo: string) => {
 		try {
@@ -67,7 +71,12 @@ export const Migration = ({ maybeAccountAddress, reputationTokenAddress, univers
 		if (forkingoutcomeStakes.deepValue === undefined) throw new Error('missing forkingoutcomeStakes')
 		const payoutNumerators = forkingoutcomeStakes.deepValue.find((outcome) => outcome.outcomeName === selectedOutcome.value)?.payoutNumerators
 		if (!payoutNumerators) throw new Error('Selected outcome not found')
-		await migrateReputationToChildUniverseByPayout(account.value, reputationTokenAddress.deepValue, payoutNumerators, repV2ToMigrate.value)
+
+		if (repV2ToMigrateToNewUniverse.value.trim() === '') throw new Error ('Input missing')
+		const repV2ToMigrateToNewUniverseBigInt = decimalStringToBigint(repV2ToMigrateToNewUniverse.value, 18n)
+		if (selectedOutcome.value === null) throw new Error('Invalid input')
+
+		await migrateReputationToChildUniverseByPayout(account.value, reputationTokenAddress.deepValue, payoutNumerators, repV2ToMigrateToNewUniverseBigInt)
 	}
 
 	const migrateFromRepV1toRepV2GenesisTokenButton = async () => {
@@ -83,6 +92,18 @@ export const Migration = ({ maybeAccountAddress, reputationTokenAddress, univers
 		await approveErc20Token(account.value, REPUTATION_V1_TOKEN_ADDRESS, GENESIS_REPUTATION_V2_TOKEN_ADDRESS, v1ReputationBalance.deepValue)
 	}
 
+	const getChildUniverseButton = async () => {
+		const account = maybeAccountAddress.peek()
+		if (account === undefined) throw new Error('missing maybeAccountAddress')
+		if (forkingoutcomeStakes.deepValue === undefined) throw new Error('missing forkingoutcomeStakes')
+		const payoutNumerators = forkingoutcomeStakes.deepValue.find((outcome) => outcome.outcomeName === selectedOutcome.value)?.payoutNumerators
+		if (!payoutNumerators) throw new Error('Selected outcome not found')
+		if (selectedOutcome.value === null) throw new Error('Invalid input')
+		if (forkingMarketData.deepValue === undefined) throw new Error('Forking market missing')
+		const hotLoading = forkingMarketData.deepValue.hotLoadingMarketData
+		childUniverseAddress.deepValue = await getChildUniverse(account.value, hotLoading.universe, payoutNumerators, hotLoading.numTicks, hotLoading.numOutcomes)
+	}
+
 	if (universe.deepValue === undefined || reputationTokenAddress.deepValue === undefined || universeForkingInformation.deepValue === undefined) return <></>
 	return <div class = 'subApplication'>
 		<button class = 'button is-primary' onClick = { update }>Update data</button>
@@ -91,8 +112,8 @@ export const Migration = ({ maybeAccountAddress, reputationTokenAddress, univers
 				<span><b>Universe Name:</b>{ getUniverseName(universe.deepValue) }</span>
 				<span><b>Universe Address:</b>{ universe.deepValue }</span>
 				<span><b>Parent Universe Name:</b>{ parentUniverse.deepValue === undefined ? '' : getUniverseName(parentUniverse.deepValue) }</span>
-				<span><b>Parent Universe Address:</b>{ parentUniverse.deepValue }</span>
-				<span><b>Reputation V2 Address For The Universe:</b>{ universe.deepValue }</span>
+				<span><b>Parent Universe Address:</b><a href = '#' onClick = { (event) => { event.preventDefault(); pathSignal.value = parentUniverseUrl.value } }> { parentUniverse.value }</a></span>
+				<span><b>Reputation V2 Address For The Universe:</b>{ reputationTokenAddress.deepValue }</span>
 				<span><b>Is Universe Forking:</b>{ universeForkingInformation.deepValue.isForking ? 'Yes' : 'No' }</span>
 				<span><b>Forking End Time:</b>{ universeForkingInformation.deepValue.forkEndTime === undefined ? 'Not Forking' : formatUnixTimestampISO(universeForkingInformation.deepValue.forkEndTime) }</span>
 				<span><b>Has Forking Time Ended:</b>{ universeForkingInformation.deepValue.forkEndTime !== undefined && universeForkingInformation.deepValue.forkEndTime < new Date().getUTCSeconds() ? 'Yes' : 'No' }</span>
@@ -104,10 +125,26 @@ export const Migration = ({ maybeAccountAddress, reputationTokenAddress, univers
 			<div class = 'panel'>
 				<Market marketData = { forkingMarketData } universe = { universe }/>
 				<MarketReportingWithoutStake outcomeStakes = { forkingoutcomeStakes } selectedOutcome = { selectedOutcome }/>
+				<p> Child universe address: <a href = '#' onClick = { (event) => { event.preventDefault(); pathSignal.value = childUniverseUrl.value } }> { childUniverseAddress.value }</a></p>
+				<div style = 'margin-top: 0.5rem'>
+					<label>
+						Amount to migrate to new universe:{' '}
+						<input
+							type = 'text'
+							placeholder = ''
+							value = { repV2ToMigrateToNewUniverse.value }
+							onChange = { (event) => {
+								const target = event.target as HTMLInputElement
+								repV2ToMigrateToNewUniverse.value = target.value
+							} }
+						/>
+					</label>
+				</div>
 			</div>
+			<button class = 'button is-primary' onClick = { getChildUniverseButton }>Refresh child universe for the selection</button>
 			<button class = 'button is-primary' onClick = { migrateReputationToChildUniverseByPayoutButton }>Migrate Reputation to the new universe</button>
 		</> : <></> }
-		{ isGenesisUniverseField ? <>
+		{ isGenesisUniverseField.value ? <>
 			<div class = 'panel'>
 				<div style = 'display: grid'>
 					<span><b>Reputation V1 Address:</b>{ REPUTATION_V1_TOKEN_ADDRESS }</span>

@@ -1,4 +1,4 @@
-import { Signal, useSignal } from '@preact/signals'
+import { Signal, useSignal, useSignalEffect } from '@preact/signals'
 import { useEffect, useRef } from 'preact/hooks'
 import { AccountAddress, EthereumAddress, EthereumQuantity } from './types/types.js'
 import { OptionalSignal, useOptionalSignal } from './utils/OptionalSignal.js'
@@ -149,38 +149,39 @@ export function App() {
 	const repBalance = useOptionalSignal<EthereumQuantity>(undefined)
 	const daiBalance = useOptionalSignal<EthereumQuantity>(undefined)
 
+	const pathSignal = useSignal<string>('')
+
 	const tabs = [
 		{ title: 'Trading', path: 'trading', component: <DeployContract maybeAccountAddress = { maybeAccountAddress } areContractsDeployed = { areContractsDeployed }/> },
 		{ title: 'Market Creation', path: 'market-creation', component: <CreateYesNoMarket maybeAccountAddress = { maybeAccountAddress } universe = { universe } reputationTokenAddress = { reputationTokenAddress }/> },
 		{ title: 'Reporting', path: 'reporting', component: <Reporting maybeAccountAddress = { maybeAccountAddress } universe = { universe } reputationTokenAddress = { reputationTokenAddress }/> },
 		{ title: 'Claim Funds', path: 'claim-funds', component: <ClaimFunds maybeAccountAddress = { maybeAccountAddress }/> },
-		{ title: 'Migration', path: 'migration', component: <Migration maybeAccountAddress = { maybeAccountAddress } reputationTokenAddress = { reputationTokenAddress } universe = { universe } universeForkingInformation = { universeForkingInformation } /> }
+		{ title: 'Migration', path: 'migration', component: <Migration maybeAccountAddress = { maybeAccountAddress } reputationTokenAddress = { reputationTokenAddress } universe = { universe } universeForkingInformation = { universeForkingInformation } pathSignal = { pathSignal }/> }
 	] as const
 
-	useEffect(() => {
-		const hash = window.location.hash.replace('#/', '')
-		const [path, params] = hash.split('?')
-		const tabIndex = tabs.findIndex(tab => tab.path === path)
+	useSignalEffect(() => {
+		window.history.pushState({}, '', pathSignal.value)
+		const hash = pathSignal.value.replace('#/', '')
+		const [pathPart, params] = hash.split('?')
+		const tabIndex = tabs.findIndex(tab => tab.path === pathPart)
 		if (tabIndex !== -1) {
 			activeTab.value = tabIndex
+		} else {
+			//TODO: rather show 404 than keep orignal
 		}
-
 		const searchParams = new URLSearchParams(params)
 		const universeParam = searchParams.get('universe')
 		const parsed = EthereumAddress.safeParse(universeParam)
+
 		if (universeParam && parsed.success) {
-			const universeProposal = addressString(parsed.value)
-			universe.deepValue = undefined
-			const setUniverseIfValid = async () => {
-				if (maybeAccountAddress.deepValue === undefined) return
-				if (!(await isKnownUniverse(maybeAccountAddress.deepValue, universeProposal))) throw new Error(`${ universeProposal } is not an universe recognized by Augur.`)
-				universe.deepValue = universeProposal
-			}
-			setUniverseIfValid()
+			universe.deepValue = addressString(parsed.value)
 		} else {
+			//TODO: rather show 404
 			universe.deepValue = addressString(BigInt(DEFAULT_UNIVERSE))
 		}
-	}, [])
+	})
+
+	useEffect(() => { pathSignal.value = window.location.hash }, [])
 
 	const setError = (error: unknown) => {
 		if (error === undefined) {
@@ -195,6 +196,12 @@ export function App() {
 		const account = maybeAccountAddress.deepPeek()
 		if (account === undefined) return
 		chainId.value = await getChainId(account)
+	}
+
+	const setUniverseIfValid = async () => {
+		if (maybeAccountAddress.deepValue === undefined) return
+		if (universe.deepValue === undefined) return
+		if (!(await isKnownUniverse(maybeAccountAddress.deepValue, universe.deepValue))) throw new Error(`${ universe.deepValue } is not an universe recognized by Augur.`)
 	}
 
 	useEffect(() => {
@@ -217,6 +224,7 @@ export function App() {
 				loadingAccount.value = false
 				areContractsDeployed.value = await isAugurConstantProductMarketDeployed(maybeAccountAddress.deepValue)
 			}
+			setUniverseIfValid()
 		}
 		fetchAccount()
 		return () => {
@@ -226,19 +234,19 @@ export function App() {
 		}
 	}, [])
 
-	useEffect(() => {
-		const universeInfo = async () => {
-			if (maybeAccountAddress.deepValue === undefined) return
-			if (universe.deepValue === undefined) return
-			universeForkingInformation.deepValue = await getUniverseForkingInformation(maybeAccountAddress.deepValue, universe.deepValue)
-			reputationTokenAddress.deepValue = await getReputationTokenForUniverse(maybeAccountAddress.deepValue, universe.deepValue)
+	useSignalEffect(() => {
+		const universeInfo = async (maybeAccountAddress: AccountAddress | undefined, universe: AccountAddress | undefined) => {
+			if (maybeAccountAddress === undefined) return
+			if (universe === undefined) return
+			universeForkingInformation.deepValue = await getUniverseForkingInformation(maybeAccountAddress, universe)
+			reputationTokenAddress.deepValue = await getReputationTokenForUniverse(maybeAccountAddress, universe)
 
-			repBalance.deepValue = await getErc20TokenBalance(maybeAccountAddress.deepValue, reputationTokenAddress.deepValue, maybeAccountAddress.deepValue)
-			daiBalance.deepValue = await getErc20TokenBalance(maybeAccountAddress.deepValue, DAI_TOKEN_ADDRESS, maybeAccountAddress.deepValue)
-			ethBalance.deepValue = await getEthereumBalance(maybeAccountAddress.deepValue, maybeAccountAddress.deepValue)
+			repBalance.deepValue = await getErc20TokenBalance(maybeAccountAddress, reputationTokenAddress.deepValue, maybeAccountAddress)
+			daiBalance.deepValue = await getErc20TokenBalance(maybeAccountAddress, DAI_TOKEN_ADDRESS, maybeAccountAddress)
+			ethBalance.deepValue = await getEthereumBalance(maybeAccountAddress, maybeAccountAddress)
 		}
-		universeInfo()
-	}, [maybeAccountAddress.value, universe.value])
+		universeInfo(maybeAccountAddress.deepValue, universe.deepValue)
+	})
 
 	if (universe.deepValue === undefined) return <main><p> loading... </p></main>
 

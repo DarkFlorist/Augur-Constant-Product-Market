@@ -15,6 +15,7 @@ import { AUDIT_FUNDS_ABI } from '../ABI/AuditFunds.js'
 import { createReadClient, createWriteClient } from './ethereumWallet.js'
 import { UNIVERSE_ABI } from '../ABI/Universe.js'
 import { getAllPayoutNumeratorCombinations } from './augurUtils.js'
+import { encodePacked, keccak256 } from 'viem'
 
 export const createYesNoMarket = async (universe: AccountAddress, marketCreator: AccountAddress, endTime: bigint, feePerCashInAttoCash: bigint, affiliateValidator: AccountAddress, affiliateFeeDivisor: bigint, designatedReporterAddress: AccountAddress, extraInfo: string) => {
 	const client = createWriteClient(marketCreator)
@@ -98,15 +99,14 @@ export const finalizeMarket = async (writer: AccountAddress, market: AccountAddr
 	})
 }
 
-export const derivePayoutDistributionHash = async (reader: AccountAddress, market: AccountAddress, payoutNumerators: EthereumQuantity[]) => {
-	// TODO, this can be computed locally too, see here: https://github.com/AugurProject/augur/blob/dev/packages/augur-core/src/contracts/Augur.sol#L243
-	const client = createReadClient(reader)
-	return await client.readContract({
-		abi: MARKET_ABI,
-		functionName: 'derivePayoutDistributionHash',
-		address: market,
-		args: [payoutNumerators]
-	})
+// see here: https://github.com/AugurProject/augur/blob/dev/packages/augur-core/src/contracts/Augur.sol#L243
+export const derivePayoutDistributionHash = (payoutNumerators: bigint[], numTicks: bigint, numOutcomes: bigint): `0x${ string }` => {
+	if (BigInt(payoutNumerators.length) !== numOutcomes) throw new Error('Malformed payout length')
+	if (!(payoutNumerators[0] === 0n || payoutNumerators[0] === numTicks)) throw new Error('Invalid report must be fully paid to Invalid')
+	const _sum = payoutNumerators.reduce((acc, val) => acc + val, 0n)
+	if (_sum !== numTicks) throw new Error('Malformed payout sum')
+	const encoded = encodePacked(['uint256[]'], [payoutNumerators])
+	return keccak256(encoded)
 }
 
 export const getStakeInOutcome = async (reader: AccountAddress, market: AccountAddress, payoutDistributionHash: EthereumBytes32) => {
@@ -119,9 +119,9 @@ export const getStakeInOutcome = async (reader: AccountAddress, market: AccountA
 	})
 }
 
-export const getStakesOnAllOutcomesOnYesNoMarketOrCategorical = async (reader: AccountAddress, market: AccountAddress, numOutcomes: number, numTicks: EthereumQuantity) => {
+export const getStakesOnAllOutcomesOnYesNoMarketOrCategorical = async (reader: AccountAddress, market: AccountAddress, numOutcomes: bigint, numTicks: EthereumQuantity) => {
 	const allPayoutNumeratorCombinations = getAllPayoutNumeratorCombinations(numOutcomes, numTicks)
-	const payoutDistributionHashes = await Promise.all(allPayoutNumeratorCombinations.map(async (payoutNumerator) => EthereumQuantity.parse(await derivePayoutDistributionHash(reader, market, payoutNumerator))))
+	const payoutDistributionHashes = allPayoutNumeratorCombinations.map((payoutNumerators) => EthereumQuantity.parse(derivePayoutDistributionHash(payoutNumerators, numTicks, numOutcomes)))
 	return await Promise.all(payoutDistributionHashes.map((payoutDistributionHash) => getStakeInOutcome(reader, market, payoutDistributionHash)))
 }
 
@@ -491,5 +491,16 @@ export const getParentUniverse = async (reader: AccountAddress, universe: Accoun
 		functionName: 'getParentUniverse',
 		address: universe,
 		args: []
+	})
+}
+
+export const getChildUniverse = async (reader: AccountAddress, universe: AccountAddress, payoutNumerators: EthereumQuantity[], numTicks: bigint, numOutcomes: bigint) => {
+	const PayoutDistributionHash = derivePayoutDistributionHash(payoutNumerators, numTicks, numOutcomes)
+	const client = createReadClient(reader)
+	return await client.readContract({
+		abi: UNIVERSE_ABI,
+		functionName: 'getChildUniverse',
+		address: universe,
+		args: [PayoutDistributionHash]
 	})
 }

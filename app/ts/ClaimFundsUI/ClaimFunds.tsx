@@ -27,7 +27,7 @@ const DisplayShareData = ({ availaleShareData, selectedShares }: DisplayShareDat
 				<span key = { shareEntry.market }>
 					<label>
 						<input
-							type = 'radio'
+							type = 'checkbox'
 							name = 'selectedOutcome'
 							checked = { selectedShares.value.has(shareEntry.market) }
 							disabled = { shareEntry.payout === 0n }
@@ -68,7 +68,7 @@ const DisplayDisputesData = ({ availableDisputes, selectedDisputes }: DisplayDis
 					<span key = { disputeEntry.bond }>
 						<label>
 							<input
-								type = 'radio'
+								type = 'checkbox'
 								name = 'selectedOutcome'
 								checked = { selectedDisputes.value.has(disputeEntry.bond) }
 								disabled = { disputeEntry.amount === 0n }

@@ -157,7 +157,7 @@ export const DisplayStakes = ({ outcomeStakes, maybeAccountAddress, marketData, 
 				(time: number) => {
 					if (disputeWindowInfo.deepValue === undefined) return <></>
 					if (time <= 0) return <>`The market has resolved to "${ winningOption.outcomeName }."`</>
-					return <>`Resolving To "${ winningOption.outcomeName }" if not disputed in ${ humanReadableDateDelta(time) } (${ formatUnixTimestampISO(disputeWindowInfo.deepValue.endTime) }).`</>
+					return <>Resolving To "{ winningOption.outcomeName }" if not disputed in { humanReadableDateDelta(time) } ({ formatUnixTimestampISO(disputeWindowInfo.deepValue.endTime) }).</>
 				}
 			}/>
 		</div>
@@ -257,7 +257,7 @@ interface ReportingHistoryProps {
 export const ReportingHistory = ({ reportingHistory, marketData }: ReportingHistoryProps) => {
 	if (reportingHistory.deepValue === undefined) return <></>
 	if (marketData.deepValue === undefined) return <></>
-	const allPayoutNumerators = getAllPayoutNumeratorCombinations(Number(marketData.deepValue.hotLoadingMarketData.numOutcomes), marketData.deepValue.hotLoadingMarketData.numTicks)
+	const allPayoutNumerators = getAllPayoutNumeratorCombinations(marketData.deepValue.hotLoadingMarketData.numOutcomes, marketData.deepValue.hotLoadingMarketData.numTicks)
 
 	return <div class = 'panel'>
 		<span><b>Reporting history for the market</b></span>
@@ -326,10 +326,10 @@ export const Reporting = ({ maybeAccountAddress, universe, reputationTokenAddres
 		disputeWindowData.deepValue = await fetchHotLoadingCurrentDisputeWindowData(account.value, currentMarketData.hotLoadingMarketData.universe)
 		totalValidityBondsForAMarket.deepValue = await fetchHotLoadingTotalValidityBonds(account.value, [parsedMarketAddressString])
 		if (MARKET_TYPES[currentMarketData.hotLoadingMarketData.marketType] === 'Yes/No' || MARKET_TYPES[currentMarketData.hotLoadingMarketData.marketType] === 'Categorical') {
-			const allPayoutNumerators = getAllPayoutNumeratorCombinations(Number(marketData.deepValue.hotLoadingMarketData.numOutcomes), marketData.deepValue.hotLoadingMarketData.numTicks)
+			const allPayoutNumerators = getAllPayoutNumeratorCombinations(marketData.deepValue.hotLoadingMarketData.numOutcomes, marketData.deepValue.hotLoadingMarketData.numTicks)
 			const winningOption = await getWinningPayoutNumerators(account.value, parsedMarketAddressString)
 			const winningIndex = winningOption === undefined ? -1 : allPayoutNumerators.findIndex((option) => areEqualArrays(option, winningOption))
-			const stakes = await getStakesOnAllOutcomesOnYesNoMarketOrCategorical(account.value, parsedMarketAddressString, Number(marketData.deepValue.hotLoadingMarketData.numOutcomes), marketData.deepValue.hotLoadingMarketData.numTicks)
+			const stakes = await getStakesOnAllOutcomesOnYesNoMarketOrCategorical(account.value, parsedMarketAddressString, marketData.deepValue.hotLoadingMarketData.numOutcomes, marketData.deepValue.hotLoadingMarketData.numTicks)
 			outcomeStakes.deepValue = stakes.map((repStake, index) => {
 				const marketType = MARKET_TYPES[currentMarketData.hotLoadingMarketData.marketType]
 				if (marketType === undefined) throw new Error(`Invalid market type Id: ${ currentMarketData.hotLoadingMarketData.marketType }`)
