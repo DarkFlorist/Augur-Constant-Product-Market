@@ -116,7 +116,7 @@ export const DisplayStakes = ({ outcomeStakes, maybeWriteClient, marketData, dis
 		const market = marketData.deepValue.marketAddress
 
 		const totalRepStake = outcomeStakes.deepValue?.reduce((prev, current) => prev + current.repStake, 0n)
-		if (totalRepStake === 0n) await doInitialReport(writeClient, market, outcomeStake.payoutNumerators, reportReason, amount)
+		if (totalRepStake === 0n) return await doInitialReport(writeClient, market, outcomeStake.payoutNumerators, reportReason, amount)
 		if (outcomeStake.status === 'Winning') {
 			return await contributeToMarketDisputeOnTentativeOutcome(
 				writeClient,

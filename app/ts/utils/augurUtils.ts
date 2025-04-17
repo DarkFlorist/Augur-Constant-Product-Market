@@ -52,5 +52,5 @@ export const maxStakeAmountForOutcome = (outcomeStake: OutcomeStake, totalStake:
 
 	const requiredStakeForTheRound = requiredStake(totalStake, outcomeStake.repStake)
 	if (isSlowReporting) return outcomeStake.status === 'Losing' ? requiredStakeForTheRound - alreadyContributed : 0n
-	return (outcomeStake.status === 'Losing' ? requiredStakeForTheRound : disputeThresholdForDisputePacing - totalStake - preemptiveDisputeCrowdsourcerStake) - alreadyContributed
+	return (outcomeStake.status === 'Losing' ? requiredStakeForTheRound : disputeThresholdForDisputePacing - preemptiveDisputeCrowdsourcerStake) - alreadyContributed
 }
