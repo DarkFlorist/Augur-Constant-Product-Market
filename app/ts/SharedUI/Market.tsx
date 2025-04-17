@@ -1,5 +1,5 @@
 import { ExtraInfo } from '../CreateMarketUI/types/createMarketTypes.js'
-import { AccountAddress } from '../types/types.js'
+import { AccountAddress, EthereumQuantity } from '../types/types.js'
 import { fetchHotLoadingMarketData } from '../utils/augurContractUtils.js'
 import { MARKET_TYPES, REPORTING_STATES, YES_NO_OPTIONS } from '../utils/constants.js'
 import { assertNever } from '../utils/errorHandling.js'
@@ -40,10 +40,12 @@ export const DisplayExtraInfo = ({ marketData }: DisplayExtraInfoProps) => {
 interface MarketProps {
 	marketData: OptionalSignal<MarketData>
 	universe: OptionalSignal<AccountAddress>
+	repBond: OptionalSignal<EthereumQuantity>
 }
 
-export const Market = ({ marketData, universe }: MarketProps) => {
+export const Market = ({ marketData, universe, repBond }: MarketProps) => {
 	if (marketData.deepValue === undefined) return <></>
+	if (repBond.deepValue === undefined) return <></>
 	const formatWinningOption = () => {
 		if (marketData.deepValue === undefined) return ''
 		const marketType = MARKET_TYPES[marketData.deepValue.hotLoadingMarketData.marketType]
@@ -87,6 +89,7 @@ export const Market = ({ marketData, universe }: MarketProps) => {
 			<span><b>Num Outcomes:</b>{ marketData.deepValue.hotLoadingMarketData.numOutcomes }</span>
 			<span><b>Validity Bond:</b>{ bigintToDecimalString(marketData.deepValue.hotLoadingMarketData.validityBond, 18n, 2) } DAI</span>
 			<span><b>Reporting Fee:</b>{ marketData.deepValue.hotLoadingMarketData.reportingFeeDivisor === 0n ? "0.00%" : `${ (100 / Number(marketData.deepValue.hotLoadingMarketData.reportingFeeDivisor)).toFixed(2) }%` }</span>
+			<span><b>Rep Bond:</b>{ bigintToDecimalString(repBond.deepValue, 18n, 2) } REP</span>
 			<DisplayExtraInfo marketData = { marketData } />
 		</div>
 	</div>

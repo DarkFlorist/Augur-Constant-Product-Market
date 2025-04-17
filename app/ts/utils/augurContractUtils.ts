@@ -516,3 +516,12 @@ export const getChildUniverse = async (readClient: ReadClient, universe: Account
 		args: [PayoutDistributionHash]
 	})
 }
+
+export const getRepBond = async (readClient: ReadClient, market: AccountAddress) => {
+	return await readClient.readContract({
+		abi: MARKET_ABI,
+		functionName: 'repBond',
+		address: market,
+		args: []
+	})
+}
