@@ -3,7 +3,7 @@ import { contributeToMarketDispute, contributeToMarketDisputeOnTentativeOutcome,
 import { addressString, areEqualArrays, bigintToDecimalString, decimalStringToBigint, formatUnixTimestampISO } from '../../utils/ethereumUtils.js'
 import { ExtraInfo } from '../../CreateMarketUI/types/createMarketTypes.js'
 import { MARKET_TYPES, REPORTING_STATES } from '../../utils/constants.js'
-import { useComputed, useSignal } from '@preact/signals'
+import { Signal, useComputed, useSignal } from '@preact/signals'
 import { AccountAddress, EthereumAddress, EthereumQuantity } from '../../types/types.js'
 import { SomeTimeAgo } from './SomeTimeAgo.js'
 import { MarketReportingOptions, MarketReportingWithoutStake, OutcomeStake } from '../../SharedUI/MarketReportingOptions.js'
@@ -16,9 +16,11 @@ interface ForkMigrationProps {
 	marketData: OptionalSignal<MarketData>
 	outcomeStakes: OptionalSignal<readonly OutcomeStake[]>
 	maybeWriteClient: OptionalSignal<WriteClient>
+	canMigrate: Signal<boolean >
 }
 
-export const ForkMigration = ({ marketData, maybeWriteClient, outcomeStakes }: ForkMigrationProps) => {
+export const ForkMigration = ({ marketData, maybeWriteClient, outcomeStakes, canMigrate }: ForkMigrationProps) => {
+	if (marketData.deepValue === undefined) return <></>
 	if (outcomeStakes.deepValue === undefined) return <></>
 	const initialReportReason = useSignal<string>('')
 	const selectedOutcome = useSignal<string | null>(null)
@@ -40,10 +42,11 @@ export const ForkMigration = ({ marketData, maybeWriteClient, outcomeStakes }: F
 	return <div class = 'panel'>
 		<div style = 'display: grid'>
 			<span><b>Market Fork Migration:</b></span>
-			<MarketReportingWithoutStake outcomeStakes = { outcomeStakes } selectedOutcome = { selectedOutcome }/>
+			<MarketReportingWithoutStake outcomeStakes = { outcomeStakes } selectedOutcome = { selectedOutcome } enabled = { canMigrate }/>
 			<label>
 				Initial Report Reason:{' '}
 				<input
+				 	disabled = { !canMigrate.value }
 					type = 'text'
 					value = { initialReportReason.value }
 					onChange = { (event) => {
@@ -54,10 +57,10 @@ export const ForkMigration = ({ marketData, maybeWriteClient, outcomeStakes }: F
 			</label>
 		</div>
 		<div style = 'margin-top: 1rem'>
-			<button class = 'button is-primary' onClick = { disavowCrowdsourcersButton }>Disavow Crowdsourcers</button>
+			<button class = 'button is-primary' onClick = { disavowCrowdsourcersButton } disabled = { !canMigrate.value }>Disavow Crowdsourcers</button>
 		</div>
 		<div style = 'margin-top: 1rem'>
-			<button class = 'button is-primary' onClick = { migrateThroughOneForkButton }>Migrate Through One Fork</button>
+			<button class = 'button is-primary' onClick = { migrateThroughOneForkButton } disabled = { !canMigrate.value }>Migrate Through One Fork</button>
 		</div>
 	</div>
 }
@@ -282,6 +285,20 @@ export const Reporting = ({ maybeReadClient, maybeWriteClient, universe, reputat
 	const lastCompletedCrowdSourcer = useOptionalSignal<Awaited<ReturnType<typeof getLastCompletedCrowdSourcer>>>(undefined)
 	const repBond = useOptionalSignal<EthereumQuantity>(undefined)
 
+	const canFinalize = useComputed(() => {
+		if (marketData.deepValue === undefined) return false
+		const state = REPORTING_STATES[marketData.deepValue.hotLoadingMarketData.reportingState]
+		if (state === 'AwaitingFinalization') return true
+		return false
+	})
+
+	const canMigrate = useComputed(() => {
+		if (marketData.deepValue === undefined) return false
+		const state = REPORTING_STATES[marketData.deepValue.hotLoadingMarketData.reportingState]
+		if (state === 'AwaitingForkMigration') return true
+		return false
+	})
+
 	const getParsedExtraInfo = (extraInfo: string) => {
 		try {
 			return ExtraInfo.parse(JSON.parse(extraInfo))
@@ -380,8 +397,8 @@ export const Reporting = ({ maybeReadClient, maybeWriteClient, universe, reputat
 			<Market marketData = { marketData } universe = { universe } repBond = { repBond }/>
 			<ReportingHistory marketData = { marketData } reportingHistory = { reportingHistory }/>
 			<DisplayStakes outcomeStakes = { outcomeStakes } marketData = { marketData } maybeWriteClient = { maybeWriteClient } preemptiveDisputeCrowdsourcerStake = { preemptiveDisputeCrowdsourcerStake } disputeWindowInfo = { disputeWindowInfo } forkValues = { forkValues } lastCompletedCrowdSourcer = { lastCompletedCrowdSourcer } repBond = { repBond }/>
-			<button class = 'button is-primary' onClick = { finalizeMarketButton }>Finalize Market</button>
-			<ForkMigration marketData = { marketData } maybeWriteClient = { maybeWriteClient } outcomeStakes = { outcomeStakes }/>
+			{ marketData.deepValue === undefined ? <> </> : <button class = 'button is-primary' onClick = { finalizeMarketButton } disabled = { !canFinalize.value }>Finalize Market</button> }
+			<ForkMigration marketData = { marketData } maybeWriteClient = { maybeWriteClient } outcomeStakes = { outcomeStakes } canMigrate = { canMigrate }/>
 		</div>
 	</div>
 }

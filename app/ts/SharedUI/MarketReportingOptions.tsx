@@ -95,14 +95,16 @@ export type MarketOutcomeOption = {
 type MarketReportingWithoutStakeProps = {
 	selectedOutcome: Signal<string | null>
 	outcomeStakes: OptionalSignal<readonly MarketOutcomeOption[]>
+	enabled?: Signal<boolean>
 }
 
-export const MarketReportingWithoutStake = ({ outcomeStakes, selectedOutcome }: MarketReportingWithoutStakeProps) => {
+export const MarketReportingWithoutStake = ({ outcomeStakes, selectedOutcome, enabled }: MarketReportingWithoutStakeProps) => {
 	if (outcomeStakes.deepValue === undefined) return <></>
 	return outcomeStakes.deepValue.map((outcomeStake) => (
 		<span key = { outcomeStake.outcomeName }>
 			<label>
 				<input
+					disabled = { enabled !== undefined && !enabled.value }
 					type = 'radio'
 					name = 'selectedOutcome'
 					checked = { selectedOutcome.value === outcomeStake.outcomeName }
